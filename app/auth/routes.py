@@ -1,6 +1,7 @@
-from flask import Blueprint, request, jsonify
-from firebase_admin import auth, exceptions
+from flask import Blueprint, request, jsonify, g
+from firebase_admin import auth as firebase_auth, exceptions
 from bson import json_util
+import json
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -19,7 +20,7 @@ def signup():
             return jsonify({'error': 'Please login with vit email id only'}), 400
 
         try:
-            user = auth.create_user(
+            user = firebase_auth.create_user(
                 email=email,
                 password=password,
                 display_name=name
@@ -33,8 +34,15 @@ def signup():
             'name': name,
             'email': email,
         }
-        # We'll handle database insertion in a different way
-        
+
+        # Insert user data into MongoDB
+        try:
+            from flask import current_app
+            current_app.db.users.insert_one(user_data)
+            print("User data inserted successfully!")
+        except Exception as db_error:
+            return jsonify({'error': f'Database error: {str(db_error)}'}), 500
+
         return jsonify({'message': 'User created successfully', 'uid': uid}), 201
 
     except Exception as e:
@@ -47,7 +55,7 @@ def login():
         token = data.get('token')
         if not token:
             return jsonify({'error': 'Missing token'}), 400
-        decoded_token = auth.verify_id_token(token)
+        decoded_token = firebase_auth.verify_id_token(token)
         uid = decoded_token['uid']
         #Token is valid
         return jsonify({'message': 'Login successful', 'uid': uid}), 200
